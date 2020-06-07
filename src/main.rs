@@ -57,28 +57,24 @@ fn scrape_info(html: &str) -> Vec<Prediction> {
 
     for prediction in fragment.select(&selector) {
         let day = select_first_inner(prediction, "[data-testid=\"daypartName\"");
-        let date = if day == "Tonight" {
-            now.date()
-        } else {
-            // Fri 05
-            let day = day
-                .split_whitespace()
-                .nth(1)
-                .unwrap()
-                .parse::<u32>()
-                .unwrap();
-            let mut month = now.month();
-            let mut year = now.year();
+        let date = match day.split_whitespace().nth(1) {
+            Some(day) => {
+                // Fri 05
+                let day = day.parse::<u32>().unwrap();
+                let mut month = now.month();
+                let mut year = now.year();
 
-            if day < now.day() {
-                month += 1;
-                if month > 12 {
-                    month = 1;
-                    year += 1;
+                if day < now.day() {
+                    month += 1;
+                    if month > 12 {
+                        month = 1;
+                        year += 1;
+                    }
                 }
-            }
 
-            NaiveDate::from_ymd(year, month, day)
+                NaiveDate::from_ymd(year, month, day)
+            }
+            None => now.date(), // Tonight, Today
         };
 
         let date = date.format(DATE_FORMAT).to_string();
@@ -204,44 +200,4 @@ fn main() {
             .unwrap();
         csv_file.write_all(content.as_bytes()).unwrap();
     }
-
-    // let csv_file = File::open(get_first_arg()).expect("couldn't open file");
-    // let mut wtr = WriterBuilder::new().delimiter(b'\t').from_writer(vec![]);
-    // let mut rdr = ReaderBuilder::new().delimiter(b'\t').from_reader(csv_file);
-    //
-    // let existing_headers: Vec<String> = rdr
-    //     .headers()
-    //     .expect("couldn't read headers")
-    //     .iter()
-    //     .map(String::from)
-    //     .collect();
-    //
-    // let mut start_column = 0;
-    // for (i, header) in existing_headers.iter().enumerate() {
-    //     if header == "prediction date" {
-    //         continue;
-    //     }
-    //
-    //     let column_date = NaiveDate::parse_from_str(header, DATE_FORMAT).unwrap();
-    //     if column_date == predictions[0].date {
-    //         start_column = i;
-    //     }
-    // }
-    //
-    // for (record_i, record) in rdr.records().enumerate() {
-    //     print!("{} :: ", record_i);
-    //     for (field_i, field) in record.unwrap().iter().enumerate() {
-    //         if field_i == 0 {
-    //             print!("prediction date: {}", field);
-    //         } else {
-    //             print!(
-    //                 "\t{}: {}",
-    //                 NaiveDate::parse_from_str(&existing_headers[field_i], DATE_FORMAT)
-    //                     .unwrap_or_else(|_| panic!("invalid date {}", field)),
-    //                 &field,
-    //             );
-    //         }
-    //     }
-    //     println!();
-    // }
 }
