@@ -1,10 +1,8 @@
 #![warn(clippy::all)]
 use chrono::{Datelike, Local, NaiveDate};
-use csv::WriterBuilder;
+use clap::{App, Arg, ArgMatches};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::env;
-use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
@@ -12,19 +10,20 @@ use std::io::{Read, Write};
 const DATE_FORMAT: &str = "%Y-%m-%d";
 
 #[derive(Serialize, Deserialize, Debug)]
-struct TempHiLo {
+struct TempPrediction {
+    made_at: String,
     low: String,
     high: String,
 }
 
 struct Prediction {
-    date: String,
-    temp: TempHiLo,
+    for_date: String,
+    temp: TempPrediction,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SavedPredictions {
-    predictions: BTreeMap<String, Vec<TempHiLo>>,
+    predictions: BTreeMap<String, Vec<TempPrediction>>,
 }
 
 fn query_weather_com() -> reqwest::blocking::Response {
@@ -86,30 +85,27 @@ fn scrape_info(html: &str) -> Vec<Prediction> {
         let low = select_first_inner(
             prediction,
             "[data-testid=\"lowTempValue\"] > [data-testid=\"TemperatureValue\"]",
-        );
-        let high = select_first_inner(prediction, "[data-testid=\"TemperatureValue\"]");
-        let temp = TempHiLo { low, high };
-
-        predictions.push(Prediction { date, temp });
+        )
+        .replace("°", "");
+        let high =
+            select_first_inner(prediction, "[data-testid=\"TemperatureValue\"]").replace("°", "");
+        let made_at = now.format(DATE_FORMAT).to_string();
+        let temp = TempPrediction { made_at, low, high };
+        predictions.push(Prediction {
+            for_date: date,
+            temp,
+        });
     }
 
     predictions
 }
 
-/// Returns the first positional argument sent to this process. If there are no
-/// positional arguments, then this returns an error.
-fn get_first_arg() -> OsString {
-    env::args_os()
-        .nth(1)
-        .expect("expected data store path as first argument")
-}
-
-fn read_data_store() -> String {
+fn read_data_store(data_store_path: &str) -> String {
     let mut data_store_file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
-        .open(get_first_arg())
+        .open(data_store_path)
         .unwrap();
     let mut data_store = String::new();
     data_store_file.read_to_string(&mut data_store).unwrap();
@@ -124,16 +120,45 @@ fn read_data_store() -> String {
     data_store
 }
 
-fn write_data_store(serialized: String) {
+fn write_data_store(data_store_path: &str, serialized: String) {
     let mut data_store_file = OpenOptions::new()
         .write(true)
-        .open(get_first_arg())
+        .open(data_store_path)
         .unwrap();
     data_store_file.write_all(serialized.as_bytes()).unwrap();
 }
 
+fn parse_args<'a>() -> ArgMatches<'a> {
+    App::new("weather.com prediction accuracy analysis")
+        .version("1.0")
+        .author("Joren Van Onder <joren@jvo.sh>")
+        .about("Scrapes weather.com and produces CSVs that can be plotted.")
+        .arg(
+            Arg::with_name("data store")
+                .short("d")
+                .long("--data-store")
+                .value_name("FILE")
+                .help("Path to the data store")
+                .required(true)
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("csv directory")
+                .short("c")
+                .long("--csv-directory")
+                .value_name("DIRECTORY")
+                .help("Directory where all CSVs will be stored")
+                .required(true)
+                .takes_value(true),
+        )
+        .get_matches()
+}
+
 fn main() {
-    let data_store = read_data_store();
+    let args = parse_args();
+    let data_store_path = args.value_of("data store").unwrap();
+    let csv_directory = args.value_of("csv directory").unwrap();
+    let data_store = read_data_store(data_store_path);
 
     let response = query_weather_com();
     let predictions = scrape_info(&response.text().unwrap());
@@ -143,21 +168,42 @@ fn main() {
     for prediction in predictions {
         let prev_values = saved_predictions
             .predictions
-            .entry(prediction.date)
+            .entry(prediction.for_date)
             .or_insert(vec![]);
-        prev_values.push(prediction.temp);
+
+        if prev_values.is_empty() || prev_values.last().unwrap().made_at != prediction.temp.made_at
+        {
+            prev_values.push(prediction.temp);
+        }
     }
 
     for (date, temperatures) in &saved_predictions.predictions {
         println!("{}: {:?}", date, temperatures);
     }
 
-    println!(
-        "serialized: {}",
-        serde_json::to_string(&saved_predictions).unwrap()
+    write_data_store(
+        data_store_path,
+        serde_json::to_string(&saved_predictions).unwrap(),
     );
 
-    write_data_store(serde_json::to_string(&saved_predictions).unwrap());
+    for (for_date, predictions) in saved_predictions.predictions {
+        let mut content = String::new();
+        content.push_str(&format!("at date\tlow\thigh\n"));
+        for prediction in predictions {
+            content.push_str(&format!(
+                "{}\t{}\t{}\n",
+                prediction.made_at, prediction.low, prediction.high
+            ));
+        }
+
+        let mut csv_file = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(format!("{}/{}.csv", csv_directory, for_date))
+            .unwrap();
+        csv_file.write_all(content.as_bytes()).unwrap();
+    }
 
     // let csv_file = File::open(get_first_arg()).expect("couldn't open file");
     // let mut wtr = WriterBuilder::new().delimiter(b'\t').from_writer(vec![]);
