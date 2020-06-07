@@ -1,26 +1,36 @@
 #![warn(clippy::all)]
-use chrono::{Datelike, Duration, Local, NaiveDate};
-use csv::{ReaderBuilder, WriterBuilder};
+use chrono::{Datelike, Local, NaiveDate};
+use csv::WriterBuilder;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fmt::Debug;
-use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
 
-#[derive(Debug)]
+const DATE_FORMAT: &str = "%Y-%m-%d";
+
+#[derive(Serialize, Deserialize, Debug)]
 struct TempHiLo {
     low: String,
     high: String,
 }
 
 struct Prediction {
-    date: NaiveDate,
+    date: String,
     temp: TempHiLo,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct SavedPredictions {
+    predictions: BTreeMap<String, Vec<TempHiLo>>,
 }
 
 fn query_weather_com() -> reqwest::blocking::Response {
     println!("Querying...");
-    let url = "https://weather.com/weather/tenday/l/San+Francisco+CA?canonicalCityId=dfdaba8cbe3a4d12a8796e1f7b1ccc7174b4b0a2d5ddb1c8566ae9f154fa638c";
+    let url = "https://weather.com/weather/tenday/l/\
+San+Francisco+CA?canonicalCityId=dfdaba8cbe3a4d12a8796e1f7b1ccc7174b4b0a2d5ddb1c8566ae9f154fa638c";
     let client = reqwest::blocking::Client::new();
     let response = client.get(url).send().unwrap();
     println!("Got {}", response.status());
@@ -72,6 +82,7 @@ fn scrape_info(html: &str) -> Vec<Prediction> {
             NaiveDate::from_ymd(year, month, day)
         };
 
+        let date = date.format(DATE_FORMAT).to_string();
         let low = select_first_inner(
             prediction,
             "[data-testid=\"lowTempValue\"] > [data-testid=\"TemperatureValue\"]",
@@ -90,24 +101,63 @@ fn scrape_info(html: &str) -> Vec<Prediction> {
 fn get_first_arg() -> OsString {
     env::args_os()
         .nth(1)
-        .expect("expected csv path as first argument")
+        .expect("expected data store path as first argument")
+}
+
+fn read_data_store() -> String {
+    let mut data_store_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(get_first_arg())
+        .unwrap();
+    let mut data_store = String::new();
+    data_store_file.read_to_string(&mut data_store).unwrap();
+
+    if data_store.is_empty() {
+        data_store = serde_json::to_string(&SavedPredictions {
+            predictions: BTreeMap::new(),
+        })
+        .unwrap();
+    }
+
+    data_store
+}
+
+fn write_data_store(serialized: String) {
+    let mut data_store_file = OpenOptions::new()
+        .write(true)
+        .open(get_first_arg())
+        .unwrap();
+    data_store_file.write_all(serialized.as_bytes()).unwrap();
 }
 
 fn main() {
-    const DATE_FORMAT: &str = "%Y-%m-%d";
+    let data_store = read_data_store();
+
     let response = query_weather_com();
     let predictions = scrape_info(&response.text().unwrap());
 
-    let mut predictions_map: BTreeMap<NaiveDate, Vec<TempHiLo>> = BTreeMap::new(); // TODO read this from file
-
+    println!("Disk data store: {}", data_store);
+    let mut saved_predictions: SavedPredictions = serde_json::from_str(&data_store).unwrap();
     for prediction in predictions {
-        let mut prev_values = predictions_map.entry(prediction.date).or_insert(vec![]);
+        let prev_values = saved_predictions
+            .predictions
+            .entry(prediction.date)
+            .or_insert(vec![]);
         prev_values.push(prediction.temp);
     }
 
-    for (date, temperatures) in predictions_map {
+    for (date, temperatures) in &saved_predictions.predictions {
         println!("{}: {:?}", date, temperatures);
     }
+
+    println!(
+        "serialized: {}",
+        serde_json::to_string(&saved_predictions).unwrap()
+    );
+
+    write_data_store(serde_json::to_string(&saved_predictions).unwrap());
 
     // let csv_file = File::open(get_first_arg()).expect("couldn't open file");
     // let mut wtr = WriterBuilder::new().delimiter(b'\t').from_writer(vec![]);
