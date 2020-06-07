@@ -169,7 +169,7 @@ fn main() {
         let prev_values = saved_predictions
             .predictions
             .entry(prediction.for_date)
-            .or_insert(vec![]);
+            .or_insert_with(Vec::new);
 
         if prev_values.is_empty() || prev_values.last().unwrap().made_at != prediction.temp.made_at
         {
