@@ -2,6 +2,10 @@
 set -euo pipefail
 # set -o xtrace
 
+SCRIPT=$(realpath "${0}")
+SCRIPTPATH=$(dirname "${SCRIPT}")
+cd "${SCRIPTPATH}"
+
 pushd csv &> /dev/null
 ALL_TEMPS=$(cut -f 2 -- *.csv | grep '[0-9]')
 ALL_TEMPS+=$'\n'
@@ -52,16 +56,21 @@ done
 
 IMAGES=""
 for SVG_FILENAME in *.svg; do
-    IMAGES+="      <embed src="'"'"${SVG_FILENAME}"'"'" type="'"'"image/svg+xml"'"'"/>
+    IMAGES+="      <embed src="'"'"/weather/csv/${SVG_FILENAME}"'"'" type="'"'"image/svg+xml"'"'"/>
 "
 done
 
 HTML='<!DOCTYPE html>
-<hmtl>
+<html>
   <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
     <title>Predictions</title>
     <style>
+      body {
+        font-color: red;
+      }
+
       .container {
         display: flex; 
         flex-wrap: wrap;
@@ -75,8 +84,8 @@ HTML+="${IMAGES}"
 HTML+='
     </div>
   </body>
-</hmtl>'
+</html>'
 
-echo "${HTML}" > out.html
+echo "${HTML}" > ../index.html
 
 popd &> /dev/null
