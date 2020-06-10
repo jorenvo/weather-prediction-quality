@@ -31,7 +31,7 @@ set style line 2 \
     linetype 1 linewidth 2 \
     pointtype 7 pointsize 0.5
 
-set term svg enhanced mouse size 300,200
+set term svg size 300,200
 set xdata time
 set timefmt '%Y-%m-%d' # format in data.dat
 set format x '%m-%d' # xtics format
@@ -56,7 +56,7 @@ done
 
 IMAGES=""
 for SVG_FILENAME in *.svg; do
-    IMAGES+="      <embed src="'"'"/weather/csv/${SVG_FILENAME}"'"'" type="'"'"image/svg+xml"'"'"/>
+    IMAGES+="      <img src="'"'"/weather/csv/${SVG_FILENAME}"'"'"/>
 "
 done
 
