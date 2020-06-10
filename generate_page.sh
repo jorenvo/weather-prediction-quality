@@ -67,13 +67,15 @@ HTML='<!DOCTYPE html>
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
     <title>Predictions</title>
     <style>
-      body {
-        font-color: red;
-      }
-
       .container {
         display: flex; 
         flex-wrap: wrap;
+      }
+
+      img {
+        border: 1px solid black;
+        margin-left: -1px;
+        margin-top: -1px;
       }
     </style>
   </head>
