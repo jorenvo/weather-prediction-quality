@@ -31,7 +31,7 @@ set style line 2 \
     linetype 1 linewidth 2 \
     pointtype 7 pointsize 0.5
 
-set term svg enhanced mouse size 300,200
+set term pngcairo size 300,200
 set xdata time
 set timefmt '%Y-%m-%d' # format in data.dat
 set format x '%m-%d' # xtics format
@@ -45,18 +45,18 @@ set datafile separator '\t'
 
 set key off
 
-set title 'Prediction ${CSV_FILENAME%%.*}'
+set title 'Prediction for ${CSV_FILENAME%%.*}'
 plot '${CSV_FILENAME}' using 1:2 title 'low' with linespoints linestyle 1,\
      '${CSV_FILENAME}' using 1:3 title 'high' with linespoints linestyle 2
 "
-    FILENAME="${CSV_FILENAME%%.*}.svg"
+    FILENAME="${CSV_FILENAME%%.*}.png"
     echo "Generating ${FILENAME}..."
     echo "${GNUPLOT_SCRIPT}" | gnuplot > "${FILENAME}"
 done
 
 IMAGES=""
-for SVG_FILENAME in *.svg; do
-    IMAGES+="      <embed src="'"'"/weather/csv/${SVG_FILENAME}"'"'" type="'"'"image/svg+xml"'"'"/>
+for PNG_FILENAME in *.png; do
+    IMAGES+="      <img src="'"'"/weather/csv/${PNG_FILENAME}"'"'"/>
 "
 done
 
