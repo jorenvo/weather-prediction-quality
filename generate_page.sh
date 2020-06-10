@@ -45,7 +45,7 @@ set datafile separator '\t'
 
 set key off
 
-set title 'Prediction ${CSV_FILENAME%%.*}'
+set title 'Prediction for ${CSV_FILENAME%%.*}'
 plot '${CSV_FILENAME}' using 1:2 title 'low' with linespoints linestyle 1,\
      '${CSV_FILENAME}' using 1:3 title 'high' with linespoints linestyle 2
 "
